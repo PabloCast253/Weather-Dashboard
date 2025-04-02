@@ -47,19 +47,46 @@ const fetchWeather = async (cityName: string) => {
 
   console.log('weatherData: ', weatherData);
 
+  if (!weatherData || weatherData.error) {
+    alert(weatherData.error || "Weather data not available");
+    return; // ✅ Prevents the app from crashing
+  }
+
   renderCurrentWeather(weatherData[0]);
   renderForecast(weatherData.slice(1));
 };
 
-const fetchSearchHistory = async () => {
-  const history = await fetch('/api/weather/history', {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-  return history;
+const fetchSearchHistory = async (): Promise<any[]> => {
+  try {
+    const res = await fetch('/api/weather/history', {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const contentType = res.headers.get('content-type');
+    console.log('📦 Content-Type of /api/weather/history:', contentType);
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('⚠️ Server error:', text);
+      throw new Error(`Failed to fetch: ${res.status}`);
+    }
+
+    if (!contentType?.includes('application/json')) {
+      const text = await res.text();
+      console.error('⚠️ Not JSON. Got:', text);
+      throw new SyntaxError('Invalid JSON response');
+    }
+
+    return await res.json();
+  } catch (err) {
+    console.error('❌ Error loading search history:', err);
+    return []; // fallback to empty array so your app doesn’t crash
+  }
 };
+
+
+
 
 const deleteCityFromHistory = async (id: string) => {
   await fetch(`/api/weather/history/${id}`, {
@@ -139,24 +166,23 @@ const renderForecastCard = (forecast: any) => {
   }
 };
 
-const renderSearchHistory = async (searchHistory: any) => {
-  const historyList = await searchHistory.json();
+const renderSearchHistory = (historyList: any[]) => {
+  if (!searchHistoryContainer) return;
 
-  if (searchHistoryContainer) {
-    searchHistoryContainer.innerHTML = '';
+  searchHistoryContainer.innerHTML = '';
 
-    if (!historyList.length) {
-      searchHistoryContainer.innerHTML =
-        '<p class="text-center">No Previous Search History</p>';
-    }
+  if (!historyList.length) {
+    searchHistoryContainer.innerHTML =
+      '<p class="text-center">No Previous Search History</p>';
+    return;
+  }
 
-    // * Start at end of history array and count down to show the most recent cities at the top.
-    for (let i = historyList.length - 1; i >= 0; i--) {
-      const historyItem = buildHistoryListItem(historyList[i]);
-      searchHistoryContainer.append(historyItem);
-    }
+  for (let i = historyList.length - 1; i >= 0; i--) {
+    const historyItem = buildHistoryListItem(historyList[i]);
+    searchHistoryContainer.append(historyItem);
   }
 };
+
 
 /*
 
@@ -250,6 +276,8 @@ Event Handlers
 */
 
 const handleSearchFormSubmit = (event: any): void => {
+  console.log("Submitting form with value!!!!!:", searchInput.value);
+
   event.preventDefault();
 
   if (!searchInput.value) {
@@ -283,7 +311,12 @@ Initial Render
 */
 
 const getAndRenderHistory = () =>
-  fetchSearchHistory().then(renderSearchHistory);
+  fetchSearchHistory()
+    .then(renderSearchHistory)
+    .catch((err) => {
+      console.error('Error loading search history:', err);
+    });
+
 
 searchForm?.addEventListener('submit', handleSearchFormSubmit);
 searchHistoryContainer?.addEventListener('click', handleSearchHistoryClick);
